@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
 import { X } from "lucide-react";
 
 import Button from "../../../components/ui/Button";
-
 import { getStudents } from "../../students/services/student.service";
-
+import type { Student } from "../../students/types/student.types";
 import type { HostelAllocation } from "../types/hostel.types";
 
 interface HostelAllocationFormProps {
@@ -13,23 +13,32 @@ interface HostelAllocationFormProps {
 }
 
 const rooms = ["101", "102", "103", "104", "105"];
-
 const beds = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 export default function HostelAllocationForm({
   onSubmit,
   onClose,
 }: HostelAllocationFormProps) {
-  const students = getStudents();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [studentId, setStudentId] = useState("");
+  const [roomNumber, setRoomNumber] = useState("");
+  const [bedNumber, setBedNumber] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [studentId, setStudentId] =
-    useState("");
+  useEffect(() => {
+    async function loadStudents() {
+      try {
+        const data = await getStudents();
+        setStudents(data);
+      } catch (error) {
+        console.error("Failed to load students:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-  const [roomNumber, setRoomNumber] =
-    useState("");
-
-  const [bedNumber, setBedNumber] =
-    useState("");
+    void loadStudents();
+  }, []);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -44,9 +53,7 @@ export default function HostelAllocationForm({
     }
 
     if (!roomNumber || !bedNumber) {
-      window.alert(
-        "Please select a room and bed.",
-      );
+      window.alert("Please select a room and bed.");
       return;
     }
 
@@ -57,9 +64,7 @@ export default function HostelAllocationForm({
       batch: student.batch,
       roomNumber,
       bedNumber,
-      allocationDate: new Date()
-        .toISOString()
-        .split("T")[0],
+      allocationDate: new Date().toISOString().split("T")[0],
       status: "occupied",
     };
 
@@ -78,6 +83,7 @@ export default function HostelAllocationForm({
             type="button"
             onClick={onClose}
             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>
@@ -101,24 +107,25 @@ export default function HostelAllocationForm({
               onChange={(event) =>
                 setStudentId(event.target.value)
               }
+              disabled={isLoading}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
             >
               <option value="">
-                Select student
+                {isLoading
+                  ? "Loading students..."
+                  : "Select student"}
               </option>
 
               {students
                 .filter(
-                  (student) =>
-                    student.status === "active",
+                  (student) => student.status === "active",
                 )
                 .map((student) => (
                   <option
                     key={student.id}
                     value={student.id}
                   >
-                    {student.fullName} —{" "}
-                    {student.batch}
+                    {student.fullName} — {student.batch}
                   </option>
                 ))}
             </select>
@@ -137,15 +144,11 @@ export default function HostelAllocationForm({
                 id="hostel-room"
                 value={roomNumber}
                 onChange={(event) =>
-                  setRoomNumber(
-                    event.target.value,
-                  )
+                  setRoomNumber(event.target.value)
                 }
                 className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
               >
-                <option value="">
-                  Select room
-                </option>
+                <option value="">Select room</option>
 
                 {rooms.map((room) => (
                   <option key={room} value={room}>
@@ -167,15 +170,11 @@ export default function HostelAllocationForm({
                 id="hostel-bed"
                 value={bedNumber}
                 onChange={(event) =>
-                  setBedNumber(
-                    event.target.value,
-                  )
+                  setBedNumber(event.target.value)
                 }
                 className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
               >
-                <option value="">
-                  Select bed
-                </option>
+                <option value="">Select bed</option>
 
                 {beds.map((bed) => (
                   <option key={bed} value={bed}>
@@ -195,7 +194,7 @@ export default function HostelAllocationForm({
               Cancel
             </Button>
 
-            <Button type="submit">
+            <Button type="submit" disabled={isLoading}>
               Allocate Bed
             </Button>
           </div>

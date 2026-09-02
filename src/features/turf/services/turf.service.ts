@@ -1,58 +1,64 @@
 import { createTransaction } from "../../accounts/services/accounts.service";
-import { mockBookings } from "../data/mockBookings";
+
+import {
+  cancelBooking as cancelBookingRepository,
+  createBooking as createBookingRepository,
+  getBookingById as getBookingByIdRepository,
+  getBookings as getBookingsRepository,
+  getBookingsByDate as getBookingsByDateRepository,
+  isSlotAvailable as isSlotAvailableRepository,
+} from "../../../repositories/turf.repository";
+
 import type {
   CreateBookingInput,
   TurfBooking,
 } from "../types/turf.types";
 
-let bookings: TurfBooking[] = [...mockBookings];
-
-export function getBookings(): TurfBooking[] {
-  return [...bookings];
+export async function getBookings(): Promise<
+  TurfBooking[]
+> {
+  return getBookingsRepository();
 }
 
-export function getBookingsByDate(date: string): TurfBooking[] {
-  return bookings.filter(
-    (booking) =>
-      booking.date === date &&
-      booking.status === "confirmed",
+export async function getBookingsByDate(
+  date: string,
+): Promise<TurfBooking[]> {
+  return getBookingsByDateRepository(
+    date,
   );
 }
 
-export function isSlotAvailable(
+export async function getBookingById(
+  bookingId: string,
+): Promise<TurfBooking | undefined> {
+  return getBookingByIdRepository(
+    bookingId,
+  );
+}
+
+export async function isSlotAvailable(
   date: string,
   startTime: string,
   endTime: string,
-): boolean {
-  return !bookings.some(
-    (booking) =>
-      booking.date === date &&
-      booking.status === "confirmed" &&
-      booking.startTime === startTime &&
-      booking.endTime === endTime,
+): Promise<boolean> {
+  return isSlotAvailableRepository(
+    date,
+    startTime,
+    endTime,
   );
 }
 
-export function createBooking(
+export async function createBooking(
   input: CreateBookingInput,
-): TurfBooking | null {
-  if (
-    !isSlotAvailable(
-      input.date,
-      input.startTime,
-      input.endTime,
-    )
-  ) {
+): Promise<TurfBooking | null> {
+  const booking =
+    await createBookingRepository(
+      input,
+    );
+
+  if (!booking) {
     return null;
   }
-
-  const booking: TurfBooking = {
-    ...input,
-    id: `BOOK-${Date.now()}`,
-    status: "confirmed",
-  };
-
-  bookings = [booking, ...bookings];
 
   if (
     input.paymentStatus === "paid" ||
@@ -61,7 +67,9 @@ export function createBooking(
     const amount =
       input.paymentStatus === "paid"
         ? input.amount
-        : Math.round(input.amount / 2);
+        : Math.round(
+            input.amount / 2,
+          );
 
     createTransaction({
       type: "income",
@@ -69,7 +77,8 @@ export function createBooking(
       description: `Turf booking — ${input.customerName}`,
       amount,
       date: input.date,
-      paymentMethod: input.paymentMethod,
+      paymentMethod:
+        input.paymentMethod,
       notes: input.notes,
     });
   }
@@ -77,18 +86,10 @@ export function createBooking(
   return booking;
 }
 
-export function cancelBooking(
+export async function cancelBooking(
   bookingId: string,
-): boolean {
-  const booking = bookings.find(
-    (item) => item.id === bookingId,
+): Promise<boolean> {
+  return cancelBookingRepository(
+    bookingId,
   );
-
-  if (!booking) {
-    return false;
-  }
-
-  booking.status = "cancelled";
-
-  return true;
 }

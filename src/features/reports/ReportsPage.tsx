@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
+
 import PageHeader from "../../components/ui/PageHeader";
 
 import ReportSummaryCards from "./components/ReportSummaryCards";
@@ -17,34 +18,87 @@ import {
   calculateAttendanceStats,
 } from "./utils/report.utils";
 
+import type { Student } from "../students/types/student.types";
+import type { FeeRecord, FeePayment } from "../fees/types/fee.types";
+import type { AttendanceRecord } from "../attendance/types/attendance.types";
+
 function getToday(): string {
   return new Date().toISOString().split("T")[0];
 }
 
 export default function ReportsPage() {
-  const students = useMemo(() => getStudents(), []);
-  const fees = useMemo(() => getFees(), []);
-  const payments = useMemo(() => getPayments(), []);
-
-  const attendance = useMemo(
-    () => buildAttendanceForDate(getToday()),
+  const [students, setStudents] = useState<Student[]>(
     [],
   );
 
-  const studentStats = useMemo(
-    () => calculateStudentStats(students),
-    [students],
-  );
+  const [fees, setFees] = useState<FeeRecord[]>([]);
 
-  const feeStats = useMemo(
-    () => calculateFeeStats(fees),
-    [fees],
-  );
+  const [payments, setPayments] = useState<
+    FeePayment[]
+  >([]);
 
-  const attendanceStats = useMemo(
-    () => calculateAttendanceStats(attendance),
-    [attendance],
-  );
+  const [attendance, setAttendance] = useState<
+    AttendanceRecord[]
+  >([]);
+
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadReports() {
+      try {
+        setIsLoading(true);
+
+        const [
+          studentsData,
+          feesData,
+          paymentsData,
+          attendanceData,
+        ] = await Promise.all([
+          getStudents(),
+          Promise.resolve(getFees()),
+          Promise.resolve(getPayments()),
+          buildAttendanceForDate(getToday()),
+        ]);
+
+        setStudents(studentsData);
+        setFees(feesData);
+        setPayments(paymentsData);
+        setAttendance(attendanceData);
+      } catch (err) {
+        console.error(
+          "Failed to load reports:",
+          err,
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    void loadReports();
+  }, []);
+
+  const studentStats =
+    calculateStudentStats(students);
+
+  const feeStats = calculateFeeStats(fees);
+
+  const attendanceStats =
+    calculateAttendanceStats(attendance);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Reports"
+          description="View student, fee, and attendance statistics."
+        />
+
+        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          Loading reports...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -61,13 +115,25 @@ export default function ReportsPage() {
         outstandingFees={feeStats.outstanding}
       />
 
-      <StudentReport students={students} stats={studentStats} />
+      <StudentReport
+        students={students}
+        stats={studentStats}
+      />
 
-      <FeeReport fees={fees} stats={feeStats} />
+      <FeeReport
+        fees={fees}
+        stats={feeStats}
+      />
 
-      <AttendanceReport records={attendance} stats={attendanceStats} />
+      <AttendanceReport
+        records={attendance}
+        stats={attendanceStats}
+      />
 
-      <RecentPayments payments={payments} students={students} />
+      <RecentPayments
+        payments={payments}
+        students={students}
+      />
     </div>
   );
 }

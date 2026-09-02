@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
 import { X } from "lucide-react";
 
 import Button from "../../../components/ui/Button";
 import { getStudents } from "../../students/services/student.service";
+import type { Student } from "../../students/types/student.types";
 import { timeSlots } from "../data/mockBookings";
-
 import type {
   CreateBookingInput,
   PaymentMethod,
@@ -22,8 +23,7 @@ export default function TurfBookingForm({
   onSubmit,
   onClose,
 }: TurfBookingFormProps) {
-  const students = getStudents();
-
+  const [students, setStudents] = useState<Student[]>([]);
   const [studentId, setStudentId] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,6 +34,22 @@ export default function TurfBookingForm({
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>("Cash");
   const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadStudents() {
+      try {
+        const data = await getStudents();
+        setStudents(data);
+      } catch (error) {
+        console.error("Failed to load students:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    void loadStudents();
+  }, []);
 
   function handleStudentChange(id: string) {
     setStudentId(id);
@@ -117,16 +133,18 @@ export default function TurfBookingForm({
               onChange={(event) =>
                 handleStudentChange(event.target.value)
               }
+              disabled={isLoading}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
             >
               <option value="">
-                External customer / select later
+                {isLoading
+                  ? "Loading students..."
+                  : "External customer / select later"}
               </option>
 
               {students
                 .filter(
-                  (student) =>
-                    student.status === "active",
+                  (student) => student.status === "active",
                 )
                 .map((student) => (
                   <option

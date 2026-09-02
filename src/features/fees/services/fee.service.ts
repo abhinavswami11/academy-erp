@@ -1,104 +1,199 @@
-import { createTransaction } from "../../accounts/services/accounts.service";
-import { mockFees } from "../data/mockFees";
-import { mockPayments } from "../data/mockPayments";
-import type { FeePayment, FeeRecord } from "../types/fee.types";
+import {
+  createFee as createFeeRepository,
+  createMonthlyFee as createMonthlyFeeRepository,
+  createPayment as createPaymentRepository,
+  getFeeById as getFeeByIdRepository,
+  getFees as getFeesRepository,
+  getFeesByStudentId as getFeesByStudentIdRepository,
+  getPayments as getPaymentsRepository,
+  getPaymentsByFeeId as getPaymentsByFeeIdRepository,
+  updateFee as updateFeeRepository,
+} from "../../../repositories/fee.repository";
+import type {
+  FeePayment,
+  FeeRecord,
+} from "../types/fee.types";
 
-let fees: FeeRecord[] = [...mockFees];
-let payments: FeePayment[] = [...mockPayments];
-
-export function getFees(): FeeRecord[] {
-  return [...fees];
+export async function getFees(): Promise<
+  FeeRecord[]
+> {
+  return getFeesRepository();
 }
 
-export function getPayments(): FeePayment[] {
-  return [...payments];
+export async function getFeesByStudentId(
+  studentId: string,
+): Promise<FeeRecord[]> {
+  return getFeesByStudentIdRepository(
+    studentId,
+  );
 }
 
-export function getFeesByStudentId(studentId: string): FeeRecord[] {
-  return fees.filter((fee) => fee.studentId === studentId);
+export async function getFeeById(
+  feeId: string,
+): Promise<FeeRecord | undefined> {
+  return getFeeByIdRepository(feeId);
 }
 
-export function getPaymentsByFeeId(feeId: string): FeePayment[] {
-  return payments.filter((payment) => payment.feeId === feeId);
+export async function getPaymentsByFeeId(
+  feeId: string,
+): Promise<FeePayment[]> {
+  return getPaymentsByFeeIdRepository(
+    feeId,
+  );
 }
 
-export function calculateFeeStatus(
-  amountDue: number,
-  amountPaid: number,
-): FeeRecord["status"] {
-  if (amountPaid >= amountDue) {
-    return "paid";
-  }
-
-  if (amountPaid > 0) {
-    return "partial";
-  }
-
-  return "pending";
+export async function getPayments(): Promise<
+  FeePayment[]
+> {
+  return getPaymentsRepository();
 }
 
-export function createFeeForStudent(
+export async function createFee(
+  fee: Omit<FeeRecord, "id">,
+): Promise<FeeRecord> {
+  return createFeeRepository(fee);
+}
+
+export async function createMonthlyFee(
   studentId: string,
   studentName: string,
   monthlyFee: number,
-): FeeRecord {
-  const now = new Date();
-
-  const fee: FeeRecord = {
-    id: `FEE-${Date.now()}`,
+  month: number,
+  year: number,
+): Promise<FeeRecord> {
+  return createMonthlyFeeRepository(
     studentId,
     studentName,
-    month: now.getMonth() + 1,
-    year: now.getFullYear(),
-    amountDue: monthlyFee,
-    amountPaid: 0,
-    status: "pending",
-  };
-
-  fees = [fee, ...fees];
-
-  return fee;
+    monthlyFee,
+    month,
+    year,
+  );
 }
 
-export function recordPayment(payment: FeePayment): FeeRecord | null {
-  if (payment.amount <= 0) {
-    return null;
+export async function updateFee(
+  feeId: string,
+  data: Partial<
+    Omit<FeeRecord, "id">
+  >,
+): Promise<void> {
+  return updateFeeRepository(
+    feeId,
+    data,
+  );
+}
+
+export async function recordPayment(
+  fee: FeeRecord,
+  amount: number,
+  paymentDate: string,
+  paymentMethod: FeePayment["paymentMethod"],
+  notes: string,
+): Promise<FeePayment> {
+  const newAmountPaid =
+    fee.amountPaid + amount;
+
+  let status: FeeRecord["status"];
+
+  if (
+    newAmountPaid >= fee.amountDue
+  ) {
+    status = "paid";
+  } else if (newAmountPaid > 0) {
+    status = "partial";
+  } else {
+    status = "pending";
   }
 
-  const feeIndex = fees.findIndex((item) => item.id === payment.feeId);
+  const payment =
+    await createPaymentRepository({
+      feeId: fee.id,
+      studentId: fee.studentId,
+      amount,
+      paymentDate,
+      paymentMethod,
+      notes,
+    });
 
-  if (feeIndex < 0) {
-    return null;
-  }
-
-  const fee = fees[feeIndex];
-  const newAmountPaid = fee.amountPaid + payment.amount;
-
-  if (newAmountPaid > fee.amountDue) {
-    return null;
-  }
-
-  const updatedFee: FeeRecord = {
-    ...fee,
-    amountPaid: newAmountPaid,
-    status: calculateFeeStatus(fee.amountDue, newAmountPaid),
-  };
-
-  fees = fees.map((item) =>
-    item.id === updatedFee.id ? updatedFee : item,
+  await updateFeeRepository(
+    fee.id,
+    {
+      amountPaid: newAmountPaid,
+      status,
+    },
   );
 
-  payments = [...payments, payment];
+  return payment;
+}
 
-  createTransaction({
-    type: "income",
-    category: "Student Fees",
-    description: `Fee payment — ${fee.studentName}`,
-    amount: payment.amount,
-    date: payment.paymentDate,
-    paymentMethod: payment.paymentMethod,
-    notes: payment.notes,
-  });
+export async function ensureCurrentMonthFees(
+  students: Array<{
+    id: string;
+    fullName: string;
+    monthlyFee: number;
+    status: string;
+  }>,
+): Promise<FeeRecord[]> {
+  const today = new Date();
 
-  return updatedFee;
+  const month =
+    today.getMonth() + 1;
+
+  const year =
+    today.getFullYear();
+
+  const existingFees =
+    await getFeesRepository();
+
+  const currentMonthFees =
+    existingFees.filter(
+      (fee) =>
+        fee.month === month &&
+        fee.year === year,
+    );
+
+  const existingStudentIds =
+    new Set(
+      currentMonthFees.map(
+        (fee) => fee.studentId,
+      ),
+    );
+
+  const activeStudents =
+    students.filter(
+      (student) =>
+        student.status === "active",
+    );
+
+  const missingStudents =
+    activeStudents.filter(
+      (student) =>
+        !existingStudentIds.has(
+          student.id,
+        ),
+    );
+
+  if (
+    missingStudents.length === 0
+  ) {
+    return currentMonthFees;
+  }
+
+  const newFees =
+    await Promise.all(
+      missingStudents.map(
+        (student) =>
+          createMonthlyFeeRepository(
+            student.id,
+            student.fullName,
+            student.monthlyFee,
+            month,
+            year,
+          ),
+      ),
+    );
+
+  return [
+    ...currentMonthFees,
+    ...newFees,
+  ];
 }

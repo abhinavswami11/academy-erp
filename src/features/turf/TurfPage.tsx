@@ -1,4 +1,9 @@
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import { Plus } from "lucide-react";
 
 import Button from "../../components/ui/Button";
@@ -15,74 +20,171 @@ import {
   getBookings,
 } from "./services/turf.service";
 
-import type { CreateBookingInput } from "./types/turf.types";
+import type {
+  CreateBookingInput,
+  TurfBooking,
+} from "./types/turf.types";
 
 function getToday(): string {
-  return new Date().toISOString().split("T")[0];
+  return new Date()
+    .toISOString()
+    .split("T")[0];
 }
 
 export default function TurfPage() {
-  const [bookings, setBookings] = useState(
-    () => getBookings(),
-  );
+  const [bookings, setBookings] =
+    useState<TurfBooking[]>([]);
 
-  const [date, setDate] = useState(getToday);
-  const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
+  const [date, setDate] =
+    useState(getToday);
 
-  const filteredBookings = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const [search, setSearch] =
+    useState("");
 
-    return bookings.filter((booking) => {
-      const matchesDate =
-        booking.date === date;
+  const [showForm, setShowForm] =
+    useState(false);
 
-      const matchesSearch =
-        !query ||
-        booking.customerName
-          .toLowerCase()
-          .includes(query) ||
-        booking.phone.includes(query);
+  const [isLoading, setIsLoading] =
+    useState(true);
 
-      return matchesDate && matchesSearch;
-    });
-  }, [bookings, date, search]);
+  const [isSaving, setIsSaving] =
+    useState(false);
 
-  function handleCreateBooking(
-    input: CreateBookingInput,
-  ) {
-    const booking = createBooking(input);
+  async function loadBookings() {
+    try {
+      setIsLoading(true);
 
-    if (!booking) {
-      window.alert(
-        "This turf slot is already booked. Please select another slot.",
+      const data =
+        await getBookings();
+
+      setBookings(data);
+    } catch (error) {
+      console.error(
+        "Failed to load turf bookings:",
+        error,
       );
-      return;
+
+      window.alert(
+        "Failed to load turf bookings.",
+      );
+    } finally {
+      setIsLoading(false);
     }
-
-    setBookings(getBookings());
-    setShowForm(false);
-
-    window.alert(
-      "Turf booking created successfully.",
-    );
   }
 
-  function handleCancelBooking(
+  useEffect(() => {
+    void loadBookings();
+  }, []);
+
+  const filteredBookings =
+    useMemo(() => {
+      const query =
+        search.trim().toLowerCase();
+
+      return bookings.filter(
+        (booking) => {
+          const matchesDate =
+            booking.date === date;
+
+          const matchesSearch =
+            !query ||
+            booking.customerName
+              .toLowerCase()
+              .includes(query) ||
+            booking.phone.includes(
+              query,
+            );
+
+          return (
+            matchesDate &&
+            matchesSearch
+          );
+        },
+      );
+    }, [bookings, date, search]);
+
+  async function handleCreateBooking(
+    input: CreateBookingInput,
+  ) {
+    try {
+      setIsSaving(true);
+
+      const booking =
+        await createBooking(input);
+
+      if (!booking) {
+        window.alert(
+          "This turf slot is already booked. Please select another slot.",
+        );
+
+        return;
+      }
+
+      await loadBookings();
+
+      setShowForm(false);
+
+      window.alert(
+        "Turf booking created successfully.",
+      );
+    } catch (error) {
+      console.error(
+        "Failed to create turf booking:",
+        error,
+      );
+
+      window.alert(
+        "Failed to create turf booking.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleCancelBooking(
     bookingId: string,
   ) {
-    const confirmed = window.confirm(
-      "Are you sure you want to cancel this booking?",
-    );
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to cancel this booking?",
+      );
 
     if (!confirmed) {
       return;
     }
 
-    const success = cancelBooking(bookingId);
+    try {
+      setIsSaving(true);
 
-    if (success) {
-      setBookings(getBookings());
+      const success =
+        await cancelBooking(
+          bookingId,
+        );
+
+      if (!success) {
+        window.alert(
+          "Booking could not be found.",
+        );
+
+        return;
+      }
+
+      await loadBookings();
+
+      window.alert(
+        "Turf booking cancelled successfully.",
+      );
+    } catch (error) {
+      console.error(
+        "Failed to cancel turf booking:",
+        error,
+      );
+
+      window.alert(
+        "Failed to cancel turf booking.",
+      );
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -95,7 +197,10 @@ export default function TurfPage() {
         />
 
         <Button
-          onClick={() => setShowForm(true)}
+          onClick={() =>
+            setShowForm(true)
+          }
+          disabled={isSaving}
           className="shrink-0"
         >
           <Plus className="h-4 w-4" />
@@ -103,30 +208,46 @@ export default function TurfPage() {
         </Button>
       </div>
 
-      <div className="space-y-6">
-        <TurfFilters
-          date={date}
-          search={search}
-          onDateChange={setDate}
-          onSearchChange={setSearch}
-        />
+      {isLoading ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
+          <p className="text-sm text-slate-500">
+            Loading turf bookings...
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <TurfFilters
+            date={date}
+            search={search}
+            onDateChange={setDate}
+            onSearchChange={setSearch}
+          />
 
-        <TurfSummaryCards
-          bookings={bookings}
-          date={date}
-        />
+          <TurfSummaryCards
+            bookings={bookings}
+            date={date}
+          />
 
-        <TurfBookingTable
-          bookings={filteredBookings}
-          onCancel={handleCancelBooking}
-        />
-      </div>
+          <TurfBookingTable
+            bookings={
+              filteredBookings
+            }
+            onCancel={
+              handleCancelBooking
+            }
+          />
+        </div>
+      )}
 
       {showForm && (
         <TurfBookingForm
           date={date}
-          onSubmit={handleCreateBooking}
-          onClose={() => setShowForm(false)}
+          onSubmit={
+            handleCreateBooking
+          }
+          onClose={() =>
+            setShowForm(false)
+          }
         />
       )}
     </div>

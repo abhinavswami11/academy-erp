@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+
 import Button from "../../../components/ui/Button";
 import PageHeader from "../../../components/ui/PageHeader";
 import StudentFilters from "../components/StudentFilters";
 import StudentForm from "../components/StudentForm";
 import StudentTable from "../components/StudentTable";
 import { createStudent, getStudents } from "../services/student.service";
-import { createFeeForStudent } from "../../fees/services/fee.service";
+
 import type {
   CreateStudentInput,
   HostelFilter,
@@ -43,27 +44,62 @@ function filterStudents(
 }
 
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>(() => getStudents());
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [hostelFilter, setHostelFilter] = useState<HostelFilter>("all");
+  const [statusFilter, setStatusFilter] =
+    useState<StatusFilter>("all");
+  const [hostelFilter, setHostelFilter] =
+    useState<HostelFilter>("all");
+
   const [showForm, setShowForm] = useState(false);
 
   const filteredStudents = useMemo(
-    () => filterStudents(students, search, statusFilter, hostelFilter),
+    () =>
+      filterStudents(
+        students,
+        search,
+        statusFilter,
+        hostelFilter,
+      ),
     [students, search, statusFilter, hostelFilter],
   );
 
-  function handleCreateStudent(input: CreateStudentInput) {
-    const newStudent = createStudent(input);
-    createFeeForStudent(
-      newStudent.id,
-      newStudent.fullName,
-      newStudent.monthlyFee,
-    );
-    setStudents((prev) => [newStudent, ...prev]);
-    setShowForm(false);
-  }
+  useEffect(() => {
+    async function loadStudents() {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const data = await getStudents();
+
+        setStudents(data);
+      } catch (err) {
+        console.error("Failed to load students:", err);
+        setError("Failed to load students.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    void loadStudents();
+  }, []);
+
+  const handleCreateStudent = async (
+    input: CreateStudentInput,
+  ) => {
+    try {
+      const student = await createStudent(input);
+
+      setStudents((current) => [student, ...current]);
+      setShowForm(false);
+    } catch (err) {
+      console.error("Failed to create student:", err);
+      window.alert("Failed to create student.");
+    }
+  };
 
   return (
     <div>
@@ -72,6 +108,7 @@ export default function StudentsPage() {
           title="Students"
           description="Manage student profiles, batches, and enrollment records."
         />
+
         <Button
           onClick={() => setShowForm(true)}
           className="shrink-0 self-start"
@@ -81,22 +118,38 @@ export default function StudentsPage() {
         </Button>
       </div>
 
-      <p className="mb-4 text-sm text-slate-500">
-        {filteredStudents.length} of {students.length} students
-      </p>
+      {isLoading && (
+        <div className="mb-4 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          Loading students...
+        </div>
+      )}
 
-      <div className="mb-4">
-        <StudentFilters
-          search={search}
-          statusFilter={statusFilter}
-          hostelFilter={hostelFilter}
-          onSearchChange={setSearch}
-          onStatusFilterChange={setStatusFilter}
-          onHostelFilterChange={setHostelFilter}
-        />
-      </div>
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+          {error}
+        </div>
+      )}
 
-      <StudentTable students={filteredStudents} />
+      {!isLoading && !error && (
+        <>
+          <p className="mb-4 text-sm text-slate-500">
+            {filteredStudents.length} of {students.length} students
+          </p>
+
+          <div className="mb-4">
+            <StudentFilters
+              search={search}
+              statusFilter={statusFilter}
+              hostelFilter={hostelFilter}
+              onSearchChange={setSearch}
+              onStatusFilterChange={setStatusFilter}
+              onHostelFilterChange={setHostelFilter}
+            />
+          </div>
+
+          <StudentTable students={filteredStudents} />
+        </>
+      )}
 
       {showForm && (
         <StudentForm
