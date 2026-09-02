@@ -8,10 +8,8 @@ import AttendanceFilters from "./components/AttendanceFilters";
 import AttendanceSummaryCards from "./components/AttendanceSummaryCards";
 import AttendanceTable from "./components/AttendanceTable";
 
-import { getStudents } from "../students/services/student.service";
-
 import {
-  getAttendance,
+  buildAttendanceForDate,
   saveAttendance,
 } from "./services/attendance.service";
 
@@ -25,41 +23,16 @@ function getToday(): string {
 }
 
 export default function AttendancePage() {
-  const students = useMemo(() => getStudents(), []);
-
   const [date, setDate] = useState(getToday);
   const [batch, setBatch] = useState("");
 
-  const [records, setRecords] = useState<
-    AttendanceRecord[]
-  >(() => {
-    const today = getToday();
-
-    return getStudents().map((student) => {
-      const existing = getAttendance(
-        today,
-      ).find(
-        (record) =>
-          record.studentId === student.id,
-      );
-
-      return (
-        existing ?? {
-          id: `${student.id}-${today}`,
-          studentId: student.id,
-          studentName: student.fullName,
-          batch: student.batch,
-          date: today,
-          status: "present",
-        }
-      );
-    });
-  });
+  const [records, setRecords] = useState<AttendanceRecord[]>(() =>
+    buildAttendanceForDate(getToday()),
+  );
 
   const filteredRecords = useMemo(() => {
     return records.filter(
-      (record) =>
-        !batch || record.batch === batch,
+      (record) => !batch || record.batch === batch,
     );
   }, [records, batch]);
 
@@ -78,38 +51,9 @@ export default function AttendancePage() {
     };
   }, [filteredRecords]);
 
-  function handleDateChange(
-    newDate: string,
-  ) {
+  function handleDateChange(newDate: string) {
     setDate(newDate);
-
-    const savedRecords = getAttendance(
-      newDate,
-    );
-
-    const newRecords = students.map(
-      (student) => {
-        const existing =
-          savedRecords.find(
-            (record) =>
-              record.studentId ===
-              student.id,
-          );
-
-        return (
-          existing ?? {
-            id: `${student.id}-${newDate}`,
-            studentId: student.id,
-            studentName: student.fullName,
-            batch: student.batch,
-            date: newDate,
-            status: "present" as AttendanceStatus,
-          }
-        );
-      },
-    );
-
-    setRecords(newRecords);
+    setRecords(buildAttendanceForDate(newDate));
   }
 
   function handleStatusChange(
@@ -137,10 +81,7 @@ export default function AttendancePage() {
 
   function handleSave() {
     saveAttendance(records);
-
-    window.alert(
-      "Attendance saved successfully.",
-    );
+    window.alert("Attendance saved successfully.");
   }
 
   return (
@@ -152,10 +93,7 @@ export default function AttendancePage() {
         />
 
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={markAllPresent}
-          >
+          <Button variant="outline" onClick={markAllPresent}>
             <CheckCheck className="h-4 w-4" />
             Mark All Present
           </Button>
@@ -175,15 +113,11 @@ export default function AttendancePage() {
           onBatchChange={setBatch}
         />
 
-        <AttendanceSummaryCards
-          summary={summary}
-        />
+        <AttendanceSummaryCards summary={summary} />
 
         <AttendanceTable
           records={filteredRecords}
-          onStatusChange={
-            handleStatusChange
-          }
+          onStatusChange={handleStatusChange}
         />
       </div>
     </div>

@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
+import Button from "../../../components/ui/Button";
+import PageHeader from "../../../components/ui/PageHeader";
 import FeeSummaryCards from "../components/FeeSummaryCards";
 import FeeFilters from "../components/FeeFilters";
 import FeeTable from "../components/FeeTable";
-import CollectPaymentForm from "../components/CollectPaymentForm";import { mockFees } from "../data/mockFees";
-import { mockPayments } from "../data/mockPayments";
-import { feeService } from "../services/fee.service";
+import CollectPaymentForm from "../components/CollectPaymentForm";
+import {
+  getFees,
+  getPayments,
+  recordPayment,
+} from "../services/fee.service";
 import type {
   FeePayment,
   FeeRecord,
@@ -12,19 +17,16 @@ import type {
 } from "../types/fee.types";
 
 export default function FeesPage() {
-  const [fees, setFees] = useState<FeeRecord[]>(mockFees);
-  const [payments, setPayments] =
-    useState<FeePayment[]>(mockPayments);
+  const [fees, setFees] = useState<FeeRecord[]>(() => getFees());
+  const [payments, setPayments] = useState<FeePayment[]>(() =>
+    getPayments(),
+  );
 
   const [search, setSearch] = useState("");
-  const [status, setStatus] =
-    useState<FeeStatus | "all">("all");
+  const [status, setStatus] = useState<FeeStatus | "all">("all");
 
-    const [isPaymentFormOpen, setIsPaymentFormOpen] =
-    useState(false);
-  
-    const [paymentFee, setPaymentFee] =
-    useState<FeeRecord | null>(null);
+  const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
+  const [paymentFee, setPaymentFee] = useState<FeeRecord | null>(null);
 
   const filteredFees = useMemo(() => {
     return fees.filter((fee) => {
@@ -39,36 +41,32 @@ export default function FeesPage() {
     });
   }, [fees, search, status]);
 
-  const handleRecordPayment = (payment: FeePayment) => {
+  const unpaidFees = useMemo(
+    () => fees.filter((fee) => fee.amountPaid < fee.amountDue),
+    [fees],
+  );
+
+  function handleRecordPayment(payment: FeePayment) {
     if (!paymentFee) {
       return;
     }
-  
-    const updatedFee = feeService.recordPayment(
-      payment,
-      paymentFee
-    );
-  
+
+    const updatedFee = recordPayment(payment);
+
     if (!updatedFee) {
       window.alert("Invalid payment amount.");
       return;
     }
-  
-    setPayments((current) => [...current, payment]);
-  
-    setFees((current) =>
-      current.map((fee) =>
-        fee.id === updatedFee.id ? updatedFee : fee
-      )
-    );
-  
+
+    setPayments(getPayments());
+    setFees(getFees());
     setPaymentFee(null);
     setIsPaymentFormOpen(false);
-  };
+  }
 
-  const handleViewHistory = (fee: FeeRecord) => {
+  function handleViewHistory(fee: FeeRecord) {
     const feePayments = payments.filter(
-      (payment) => payment.feeId === fee.id
+      (payment) => payment.feeId === fee.id,
     );
 
     if (feePayments.length === 0) {
@@ -80,68 +78,53 @@ export default function FeesPage() {
       .map(
         (payment) =>
           `${payment.paymentDate} — ₹${payment.amount.toLocaleString(
-            "en-IN"
-          )} — ${payment.paymentMethod}`
+            "en-IN",
+          )} — ${payment.paymentMethod}`,
       )
       .join("\n");
 
     window.alert(
-      `${fee.studentName}\n\nPayment History:\n${history}`
+      `${fee.studentName}\n\nPayment History:\n${history}`,
     );
-  };
+  }
+
+  function openPaymentForm() {
+    if (unpaidFees.length === 0) {
+      window.alert("There are no outstanding fees.");
+      return;
+    }
+
+    setPaymentFee(null);
+    setIsPaymentFormOpen(true);
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Fees
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Track student fees, payments, and outstanding balances.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <PageHeader
+          title="Fees"
+          description="Track student fees, payments, and outstanding balances."
+        />
+
+        <Button onClick={openPaymentForm} className="shrink-0 self-start">
+          Collect Payment
+        </Button>
       </div>
 
       <FeeSummaryCards fees={fees} />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <FeeFilters
-          search={search}
-          status={status}
-          onSearchChange={setSearch}
-          onStatusChange={setStatus}
-        />
-
-        <button
-          type="button"
-          onClick={() => {
-            const unpaidFees = fees.filter(
-              (fee) => fee.amountPaid < fee.amountDue
-            );
-
-            if (unpaidFees.length === 0) {
-              window.alert("There are no outstanding fees.");
-              return;
-            }
-
-            setPaymentFee(unpaidFees[0]);
-            setIsPaymentFormOpen(true);
-          }}
-          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          + Collect Payment
-        </button>
-      </div>
-
-      <FeeTable
-        fees={filteredFees}
-        onViewHistory={handleViewHistory}
+      <FeeFilters
+        search={search}
+        status={status}
+        onSearchChange={setSearch}
+        onStatusChange={setStatus}
       />
+
+      <FeeTable fees={filteredFees} onViewHistory={handleViewHistory} />
 
       {isPaymentFormOpen && (
         <CollectPaymentForm
-          fees={fees.filter(
-            (fee) => fee.amountDue > fee.amountPaid
-          )}
+          fees={unpaidFees}
           selectedFee={paymentFee}
           onFeeChange={setPaymentFee}
           onSubmit={handleRecordPayment}

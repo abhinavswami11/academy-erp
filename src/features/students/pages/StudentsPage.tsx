@@ -6,6 +6,7 @@ import StudentFilters from "../components/StudentFilters";
 import StudentForm from "../components/StudentForm";
 import StudentTable from "../components/StudentTable";
 import { createStudent, getStudents } from "../services/student.service";
+import { createFeeForStudent } from "../../fees/services/fee.service";
 import type {
   CreateStudentInput,
   HostelFilter,
@@ -55,6 +56,11 @@ export default function StudentsPage() {
 
   function handleCreateStudent(input: CreateStudentInput) {
     const newStudent = createStudent(input);
+    createFeeForStudent(
+      newStudent.id,
+      newStudent.fullName,
+      newStudent.monthlyFee,
+    );
     setStudents((prev) => [newStudent, ...prev]);
     setShowForm(false);
   }

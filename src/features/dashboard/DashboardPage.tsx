@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ClipboardCheck,
@@ -10,53 +11,113 @@ import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import PageHeader from "../../components/ui/PageHeader";
 import StatCard from "../../components/ui/StatCard";
+import { buildAttendanceForDate } from "../attendance/services/attendance.service";
+import { getFees, getPayments } from "../fees/services/fee.service";
+import { getStudents } from "../students/services/student.service";
+import { getBookings } from "../turf/services/turf.service";
+import { formatCurrency } from "../students/utils/formatters";
+import { calculateAttendanceStats } from "../reports/utils/report.utils";
+import type { TurfBooking } from "../turf/types/turf.types";
 
-type PaymentStatus = "Paid" | "Pending" | "Partial";
-
-interface TurfBooking {
-  time: string;
-  customer: string;
-  duration: string;
-  status: PaymentStatus;
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
 }
 
-interface RecentActivity {
-  id: string;
-  text: string;
+function formatTime(time: string): string {
+  const [hours, minutes] = time.split(":").map(Number);
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
 }
 
-const turfBookings: TurfBooking[] = [
-  { time: "06:00 AM", customer: "Royal XI", duration: "2 hrs", status: "Paid" },
-  {
-    time: "08:00 AM",
-    customer: "Friends Cricket Club",
-    duration: "1 hr",
-    status: "Pending",
-  },
-  { time: "05:00 PM", customer: "Titans", duration: "2 hrs", status: "Paid" },
-  {
-    time: "07:00 PM",
-    customer: "Warriors",
-    duration: "2 hrs",
-    status: "Partial",
-  },
-];
+function getDuration(startTime: string, endTime: string): string {
+  const [startHour] = startTime.split(":").map(Number);
+  const [endHour] = endTime.split(":").map(Number);
+  const hours = endHour - startHour;
+  return hours === 1 ? "1 hr" : `${hours} hrs`;
+}
 
-const recentActivities: RecentActivity[] = [
-  { id: "1", text: "Fee collected from Rahul Sharma — ₹2,500" },
-  { id: "2", text: "Turf booking added — Royal XI" },
-  { id: "3", text: "Attendance marked — Morning Batch" },
-  { id: "4", text: "New student added — Arjun Singh" },
-];
-
-const statusStyles: Record<PaymentStatus, string> = {
-  Paid: "bg-emerald-100 text-emerald-700",
-  Pending: "bg-amber-100 text-amber-700",
-  Partial: "bg-blue-100 text-blue-700",
+const paymentStatusStyles: Record<
+  TurfBooking["paymentStatus"],
+  string
+> = {
+  paid: "bg-emerald-100 text-emerald-700",
+  pending: "bg-amber-100 text-amber-700",
+  partial: "bg-blue-100 text-blue-700",
 };
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const today = getToday();
+
+  const stats = useMemo(() => {
+    const students = getStudents();
+    const fees = getFees();
+    const bookings = getBookings();
+    const attendance = buildAttendanceForDate(today);
+    const attendanceStats = calculateAttendanceStats(attendance);
+    const payments = getPayments();
+
+    const batches = new Set(
+      students
+        .filter((student) => student.status === "active")
+        .map((student) => student.batch),
+    );
+
+    const outstandingFees = fees.reduce(
+      (sum, fee) =>
+        sum + Math.max(fee.amountDue - fee.amountPaid, 0),
+      0,
+    );
+
+    const studentsWithOutstanding = fees.filter(
+      (fee) => fee.amountPaid < fee.amountDue,
+    ).length;
+
+    const todayBookings = bookings.filter(
+      (booking) =>
+        booking.date === today && booking.status === "confirmed",
+    );
+
+    const turfRevenue = todayBookings.reduce(
+      (total, booking) =>
+        total +
+        (booking.paymentStatus === "paid"
+          ? booking.amount
+          : booking.paymentStatus === "partial"
+            ? booking.amount / 2
+            : 0),
+      0,
+    );
+
+    const recentActivities = [
+      ...payments.slice(0, 2).map((payment) => {
+        const fee = fees.find((item) => item.id === payment.feeId);
+        return {
+          id: payment.id,
+          text: `Fee collected from ${fee?.studentName ?? "student"} — ${formatCurrency(payment.amount)}`,
+        };
+      }),
+      ...todayBookings.slice(0, 2).map((booking) => ({
+        id: booking.id,
+        text: `Turf booking — ${booking.customerName}`,
+      })),
+    ].slice(0, 4);
+
+    return {
+      studentCount: students.length,
+      batchCount: batches.size,
+      outstandingFees,
+      studentsWithOutstanding,
+      turfRevenue,
+      todayBookingCount: todayBookings.length,
+      todayBookings: todayBookings.slice(0, 4),
+      attendancePercentage: attendanceStats.percentage,
+      presentCount: attendanceStats.present,
+      totalStudents: attendanceStats.total,
+      recentActivities,
+    };
+  }, [today]);
 
   return (
     <div>
@@ -68,26 +129,26 @@ export default function DashboardPage() {
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Students"
-          value="68"
-          subtitle="3 active batches"
+          value={stats.studentCount.toString()}
+          subtitle={`${stats.batchCount} active batches`}
           icon={Users}
         />
         <StatCard
           title="Pending Fees"
-          value="₹42,500"
-          subtitle="12 students"
+          value={formatCurrency(stats.outstandingFees)}
+          subtitle={`${stats.studentsWithOutstanding} students`}
           icon={Wallet}
         />
         <StatCard
           title="Today's Turf Revenue"
-          value="₹6,400"
-          subtitle="8 bookings"
+          value={formatCurrency(stats.turfRevenue)}
+          subtitle={`${stats.todayBookingCount} bookings`}
           icon={MapPin}
         />
         <StatCard
           title="Today's Attendance"
-          value="82%"
-          subtitle="56 of 68 students"
+          value={`${stats.attendancePercentage}%`}
+          subtitle={`${stats.presentCount} of ${stats.totalStudents} students`}
           icon={ClipboardCheck}
         />
       </div>
@@ -97,43 +158,58 @@ export default function DashboardPage() {
           <h3 className="mb-4 text-base font-semibold text-slate-900">
             Today&apos;s Turf Bookings
           </h3>
-          <ul className="divide-y divide-slate-100">
-            {turfBookings.map((booking) => (
-              <li
-                key={`${booking.time}-${booking.customer}`}
-                className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900">
-                    {booking.time} — {booking.customer}
-                  </p>
-                  <p className="text-xs text-slate-500">{booking.duration}</p>
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyles[booking.status]}`}
+          {stats.todayBookings.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No turf bookings scheduled for today.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {stats.todayBookings.map((booking) => (
+                <li
+                  key={booking.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0"
                 >
-                  {booking.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-900">
+                      {formatTime(booking.startTime)} —{" "}
+                      {booking.customerName}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {getDuration(booking.startTime, booking.endTime)}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${paymentStatusStyles[booking.paymentStatus]}`}
+                  >
+                    {booking.paymentStatus}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card className="p-5">
           <h3 className="mb-4 text-base font-semibold text-slate-900">
             Recent Activity
           </h3>
-          <ul className="space-y-3">
-            {recentActivities.map((activity) => (
-              <li
-                key={activity.id}
-                className="flex items-start gap-3 text-sm text-slate-600"
-              >
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
-                {activity.text}
-              </li>
-            ))}
-          </ul>
+          {stats.recentActivities.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No recent activity to show.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {stats.recentActivities.map((activity) => (
+                <li
+                  key={activity.id}
+                  className="flex items-start gap-3 text-sm text-slate-600"
+                >
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                  {activity.text}
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 
@@ -154,7 +230,10 @@ export default function DashboardPage() {
             <MapPin className="h-4 w-4" />
             New Turf Booking
           </Button>
-          <Button variant="secondary" onClick={() => navigate("/attendance")}>
+          <Button
+            variant="secondary"
+            onClick={() => navigate("/attendance")}
+          >
             <ClipboardCheck className="h-4 w-4" />
             Mark Attendance
           </Button>

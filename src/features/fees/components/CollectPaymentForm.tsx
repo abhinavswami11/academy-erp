@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type {
   FeePayment,
@@ -28,10 +28,14 @@ export default function CollectPaymentForm({
       )
     : 0;
 
-  const [amount, setAmount] = useState(balance);
+  const [amount, setAmount] = useState(0);
   const [method, setMethod] =
     useState<PaymentMethod>("Cash");
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    setAmount(balance);
+  }, [balance, selectedFee?.id]);
 
   const handleFeeChange = (
     event: React.ChangeEvent<HTMLSelectElement>
@@ -42,9 +46,6 @@ export default function CollectPaymentForm({
 
     if (fee) {
       onFeeChange(fee);
-      setAmount(
-        Math.max(fee.amountDue - fee.amountPaid, 0)
-      );
     }
   };
 
@@ -80,7 +81,13 @@ export default function CollectPaymentForm({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+      <div
+        className="absolute inset-0"
+        onClick={onCancel}
+        aria-hidden="true"
+      />
+
+      <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
         <div className="mb-5">
           <h2 className="text-lg font-semibold text-slate-900">
             Collect Payment

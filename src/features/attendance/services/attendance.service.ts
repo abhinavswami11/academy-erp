@@ -1,3 +1,4 @@
+import { getStudents } from "../../students/services/student.service";
 import { mockAttendance } from "../data/mockAttendance";
 import type {
   AttendanceRecord,
@@ -5,6 +6,29 @@ import type {
 } from "../types/attendance.types";
 
 let attendanceRecords: AttendanceRecord[] = [...mockAttendance];
+
+export function buildAttendanceForDate(
+  date: string,
+): AttendanceRecord[] {
+  const savedRecords = getAttendance(date);
+
+  return getStudents().map((student) => {
+    const existing = savedRecords.find(
+      (record) => record.studentId === student.id,
+    );
+
+    return (
+      existing ?? {
+        id: `${student.id}-${date}`,
+        studentId: student.id,
+        studentName: student.fullName,
+        batch: student.batch,
+        date,
+        status: "present" as AttendanceStatus,
+      }
+    );
+  });
+}
 
 export function getAttendance(
   date: string,

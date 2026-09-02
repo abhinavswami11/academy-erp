@@ -1,3 +1,4 @@
+import { createTransaction } from "../../accounts/services/accounts.service";
 import { mockBookings } from "../data/mockBookings";
 import type {
   CreateBookingInput,
@@ -52,6 +53,26 @@ export function createBooking(
   };
 
   bookings = [booking, ...bookings];
+
+  if (
+    input.paymentStatus === "paid" ||
+    input.paymentStatus === "partial"
+  ) {
+    const amount =
+      input.paymentStatus === "paid"
+        ? input.amount
+        : Math.round(input.amount / 2);
+
+    createTransaction({
+      type: "income",
+      category: "Turf",
+      description: `Turf booking — ${input.customerName}`,
+      amount,
+      date: input.date,
+      paymentMethod: input.paymentMethod,
+      notes: input.notes,
+    });
+  }
 
   return booking;
 }

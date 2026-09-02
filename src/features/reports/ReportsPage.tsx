@@ -8,9 +8,8 @@ import AttendanceReport from "./components/AttendanceReport";
 import RecentPayments from "./components/RecentPayments";
 
 import { getStudents } from "../students/services/student.service";
-import { mockFees } from "../fees/data/mockFees";
-import { mockPayments } from "../fees/data/mockPayments";
-import { getAttendance } from "../attendance/services/attendance.service";
+import { getFees, getPayments } from "../fees/services/fee.service";
+import { buildAttendanceForDate } from "../attendance/services/attendance.service";
 
 import {
   calculateStudentStats,
@@ -24,13 +23,11 @@ function getToday(): string {
 
 export default function ReportsPage() {
   const students = useMemo(() => getStudents(), []);
-
-  const fees = mockFees;
-
-  const payments = mockPayments;
+  const fees = useMemo(() => getFees(), []);
+  const payments = useMemo(() => getPayments(), []);
 
   const attendance = useMemo(
-    () => getAttendance(getToday()),
+    () => buildAttendanceForDate(getToday()),
     [],
   );
 
@@ -59,29 +56,18 @@ export default function ReportsPage() {
       <ReportSummaryCards
         totalStudents={studentStats.total}
         activeStudents={studentStats.active}
+        feesDue={feeStats.due}
         feesCollected={feeStats.collected}
         outstandingFees={feeStats.outstanding}
       />
 
-      <StudentReport
-        students={students}
-        stats={studentStats}
-      />
+      <StudentReport students={students} stats={studentStats} />
 
-      <FeeReport
-        fees={fees}
-        stats={feeStats}
-      />
+      <FeeReport fees={fees} stats={feeStats} />
 
-      <AttendanceReport
-        records={attendance}
-        stats={attendanceStats}
-      />
+      <AttendanceReport records={attendance} stats={attendanceStats} />
 
-      <RecentPayments
-        payments={payments}
-        students={students}
-      />
+      <RecentPayments payments={payments} students={students} />
     </div>
   );
 }

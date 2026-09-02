@@ -56,6 +56,13 @@ export default function TurfBookingForm({
       return;
     }
 
+    const numericAmount = Number(amount);
+
+    if (!numericAmount || numericAmount <= 0) {
+      window.alert("Enter a valid booking amount.");
+      return;
+    }
+
     const booking: CreateBookingInput = {
       date,
       startTime: slot.startTime,
@@ -63,7 +70,7 @@ export default function TurfBookingForm({
       customerName: customerName.trim(),
       phone: phone.trim(),
       studentId: studentId || undefined,
-      amount: Number(amount),
+      amount: numericAmount,
       paymentStatus,
       paymentMethod,
       notes: notes.trim(),
