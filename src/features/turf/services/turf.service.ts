@@ -23,17 +23,13 @@ export async function getBookings(): Promise<
 export async function getBookingsByDate(
   date: string,
 ): Promise<TurfBooking[]> {
-  return getBookingsByDateRepository(
-    date,
-  );
+  return getBookingsByDateRepository(date);
 }
 
 export async function getBookingById(
   bookingId: string,
 ): Promise<TurfBooking | undefined> {
-  return getBookingByIdRepository(
-    bookingId,
-  );
+  return getBookingByIdRepository(bookingId);
 }
 
 export async function isSlotAvailable(
@@ -52,9 +48,7 @@ export async function createBooking(
   input: CreateBookingInput,
 ): Promise<TurfBooking | null> {
   const booking =
-    await createBookingRepository(
-      input,
-    );
+    await createBookingRepository(input);
 
   if (!booking) {
     return null;
@@ -67,18 +61,15 @@ export async function createBooking(
     const amount =
       input.paymentStatus === "paid"
         ? input.amount
-        : Math.round(
-            input.amount / 2,
-          );
+        : Math.round(input.amount / 2);
 
-    createTransaction({
+    await createTransaction({
       type: "income",
       category: "Turf",
       description: `Turf booking — ${input.customerName}`,
       amount,
       date: input.date,
-      paymentMethod:
-        input.paymentMethod,
+      paymentMethod: input.paymentMethod,
       notes: input.notes,
     });
   }
@@ -89,7 +80,5 @@ export async function createBooking(
 export async function cancelBooking(
   bookingId: string,
 ): Promise<boolean> {
-  return cancelBookingRepository(
-    bookingId,
-  );
+  return cancelBookingRepository(bookingId);
 }
